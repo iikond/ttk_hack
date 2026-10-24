@@ -261,11 +261,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Map not found' })
         return
       }
-      if (map.userId !== user.id) {
-        sendJson(res, 403, { error: 'Forbidden' })
+      // Владелец или опубликованная карта
+      if ((user && map.userId === user.id) || map.published) {
+        sendJson(res, 200, map)
         return
       }
-      sendJson(res, 200, map)
+      sendJson(res, 403, { error: 'Forbidden' })
       return
     }
 
