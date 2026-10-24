@@ -205,43 +205,56 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'POST' && route === '/auth/login') {
       const body = await parseJsonBody(req)
-      const email = String(body.email || '').trim().toLowerCase()
+      const name = String(body.name || '').trim().toLowerCase()
       const password = String(body.password || '')
 
-      if (!email || !password) {
-        sendJson(res, 400, { error: 'Email and password are required' })
+      if (!name || !password) {
+        sendJson(res, 400, { error: 'Name and password are required' })
         return
       }
 
       const store = readStore()
       const user = store.users.find(
-        (item) => item.email === email && item.passwordHash === hashPassword(password),
+        (item) => item.name === name && item.passwordHash === hashPassword(password),
       )
       if (!user) {
         sendJson(res, 401, { error: 'Invalid credentials' })
         return
       }
 
-      sendJson(res, 200, { token: user.token, user: { id: user.id, email: user.email } })
+      sendJson(res, 200, { token: user.token, user: { id: user.id, name: user.name } })
       return
     }
 
     if (req.method === 'POST' && route === '/auth/register') {
       const body = await parseJsonBody(req)
-      const email = String(body.email || '').trim().toLowerCase()
+      const name = String(body.name || '').trim().toLowerCase()
       const password = String(body.password || '')
 
-      if (!email || !password || password.length < 6) {
-        sendJson(res, 400, { error: 'Email and password (min 6 chars) are required' })
+      if (!name || !password || password.length < 6) {
+        sendJson(res, 400, { error: 'Name and password (min 6 chars) are required' })
         return
       }
 
       const store = readStore()
-      const exists = store.users.some((user) => user.email === email)
+      const exists = store.users.some((user) => user.name === name)
       if (exists) {
         sendJson(res, 409, { error: 'User already exists' })
         return
       }
+
+      const newUser = {
+        id: uid('user'),
+        name,
+        passwordHash: hashPassword(password),
+        token: `tok_${crypto.randomBytes(18).toString('hex')}`,
+      }
+
+      store.users.push(newUser)
+      writeStore(store)
+      sendJson(res, 201, { token: newUser.token, user: { id: newUser.id, name: newUser.name } })
+      return
+    }
 
       const newUser = {
         id: uid('user'),

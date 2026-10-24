@@ -15,10 +15,10 @@ const useHash = () => {
 }
 
 function Login({ onAuth }) {
-  const [email, setE] = useState(''), [password, setP] = useState(''), [err, setErr] = useState('')
+  const [name, setName] = useState(''), [password, setP] = useState(''), [err, setErr] = useState('')
   const go = async (kind) => {
     try {
-      const r = await api('/auth/' + kind, { method: 'POST', json: { email, password } })
+      const r = await api('/auth/' + kind, { method: 'POST', json: { name, password } })
       tok.set(r.token); location.hash = '#/'; onAuth()
     } catch (e) { setErr(e.message) }
   }
@@ -27,10 +27,13 @@ function Login({ onAuth }) {
       <h2 style={{ margin: 0 }}>Карта пространства</h2>
       <div className="card">
         <b>Вход для организаторов</b>
-        <input placeholder="Name" type="name" value={name} onChange={(e) => setE(e.target.value)} />
+        <input placeholder="Имя" value={name} onChange={(e) => setName(e.target.value)} />
         <input placeholder="Пароль (от 6 символов)" type="password" value={password} onChange={(e) => setP(e.target.value)} />
         {err && <small style={{ color: '#e5484d' }}>{err}</small>}
-        <div className="row"><button onClick={() => go('login')}>Войти</button><button className="g" onClick={() => go('register')}>Регистрация</button></div>
+        <div className="row">
+          <button onClick={() => go('login')}>Войти</button>
+          <button className="g" onClick={() => go('register')}>Регистрация</button>
+        </div>
       </div>
       <small>Посетителям вход не нужен: откройте ссылку на карту от организатора.</small>
     </div>
