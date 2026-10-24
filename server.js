@@ -256,19 +256,6 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-      const newUser = {
-        id: uid('user'),
-        email,
-        passwordHash: hashPassword(password),
-        token: `tok_${crypto.randomBytes(18).toString('hex')}`,
-      }
-
-      store.users.push(newUser)
-      writeStore(store)
-      sendJson(res, 201, { token: newUser.token, user: { id: newUser.id, email: newUser.email } })
-      return
-    }
-
     if (req.method === 'POST' && route === '/upload') {
       const user = isAuthenticated(req)
       if (!user) {
