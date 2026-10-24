@@ -77,6 +77,12 @@ function getMapById(store, id) {
   return store.maps.find((map) => map.id === id)
 }
 
+function canAccessMap(user, map) {
+  if (!map) return false
+  if (map.published) return true
+  return !!(user && map.userId === user.id)
+}
+
 function serveStaticFile(res, filePath) {
   const ext = path.extname(filePath).toLowerCase()
   const types = {
@@ -101,6 +107,71 @@ function serveStaticFile(res, filePath) {
     res.writeHead(200, { 'Content-Type': types[ext] || 'application/octet-stream' })
     res.end(data)
   })
+}
+
+function findRoute(data, fromId, toId) {
+  const nodes = data.nodes || []
+  const edges = data.edges || []
+  const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]))
+
+  if (!nodeMap[fromId] || !nodeMap[toId]) {
+    return { error: 'Unknown node' }
+  }
+
+  if (fromId === toId) {
+    return { nodes: [nodeMap[fromId]], length: 0 }
+  }
+
+  const adj = {}
+  for (const n of nodes) adj[n.id] = []
+  for (const e of edges) {
+    if (!nodeMap[e.a] || !nodeMap[e.b]) continue
+    const dx = nodeMap[e.a].x - nodeMap[e.b].x
+    const dy = nodeMap[e.a].y - nodeMap[e.b].y
+    const dist = Math.hypot(dx, dy)
+    adj[e.a].push({ id: e.b, dist })
+    adj[e.b].push({ id: e.a, dist })
+  }
+
+  const dist = {}
+  const prev = {}
+  const visited = new Set()
+  for (const n of nodes) dist[n.id] = Infinity
+  dist[fromId] = 0
+
+  const pq = [{ id: fromId, d: 0 }]
+  while (pq.length) {
+    pq.sort((a, b) => a.d - b.d)
+    const { id: u, d } = pq.shift()
+    if (visited.has(u)) continue
+    visited.add(u)
+    if (u === toId) break
+    for (const { id: v, dist: w } of adj[u] || []) {
+      const nd = d + w
+      if (nd < dist[v]) {
+        dist[v] = nd
+        prev[v] = u
+        pq.push({ id: v, d: nd })
+      }
+    }
+  }
+
+  if (dist[toId] === Infinity) {
+    return { error: 'Route not found' }
+  }
+
+  const pathIds = []
+  let cur = toId
+  while (cur) {
+    pathIds.push(cur)
+    cur = prev[cur]
+  }
+  pathIds.reverse()
+
+  return {
+    nodes: pathIds.map((id) => nodeMap[id]),
+    length: dist[toId],
+  }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -143,7 +214,9 @@ const server = http.createServer(async (req, res) => {
       }
 
       const store = readStore()
-      const user = store.users.find((item) => item.email === email && item.passwordHash === hashPassword(password))
+      const user = store.users.find(
+        (item) => item.email === email && item.passwordHash === hashPassword(password),
+      )
       if (!user) {
         sendJson(res, 401, { error: 'Invalid credentials' })
         return
@@ -204,7 +277,13 @@ const server = http.createServer(async (req, res) => {
       }
 
       const contentType = String(req.headers['content-type'] || 'application/octet-stream')
-      const extension = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : contentType.includes('gif') ? 'gif' : 'jpg'
+      const extension = contentType.includes('png')
+        ? 'png'
+        : contentType.includes('webp')
+          ? 'webp'
+          : contentType.includes('gif')
+            ? 'gif'
+            : 'jpg'
       const fileName = `${uid('upload')}.${extension}`
       const filePath = path.join(UPLOAD_DIR, fileName)
       fs.writeFileSync(filePath, buffer)
@@ -215,21 +294,35 @@ const server = http.createServer(async (req, res) => {
 
     const user = isAuthenticated(req)
     if (!user && route !== '/maps') {
-      const allowAnonymousGetMap = req.method === 'GET' && route.startsWith('/maps/')
-      if (!allowAnonymousGetMap) {
+      const allowAnonymous =
+        req.method === 'GET' &&
+        (route.startsWith('/maps/') || route.match(/^\/maps\/[^/]+\/route$/))
+      if (!allowAnonymous) {
         sendJson(res, 401, { error: 'Unauthorized' })
         return
       }
     }
 
     if (req.method === 'GET' && route === '/maps') {
+      if (!user) {
+        sendJson(res, 401, { error: 'Unauthorized' })
+        return
+      }
       const store = readStore()
       const maps = store.maps.filter((map) => map.userId === user.id)
-      sendJson(res, 200, maps.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)))
+      sendJson(
+        res,
+        200,
+        maps.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)),
+      )
       return
     }
 
     if (req.method === 'POST' && route === '/maps') {
+      if (!user) {
+        sendJson(res, 401, { error: 'Unauthorized' })
+        return
+      }
       const body = await parseJsonBody(req)
       const store = readStore()
       const map = {
@@ -247,6 +340,46 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // GET /maps/:id/route?from=...&to=...
+    const routeMatch = route.match(/^\/maps\/([^/]+)\/route$/)
+    if (routeMatch) {
+      const mapId = routeMatch[1]
+      const store = readStore()
+      const map = getMapById(store, mapId)
+
+      if (!map) {
+        sendJson(res, 404, { error: 'Map not found' })
+        return
+      }
+      if (!canAccessMap(user, map)) {
+        sendJson(res, 403, { error: 'Forbidden' })
+        return
+      }
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'Method not allowed' })
+        return
+      }
+
+      const url = new URL(req.url, `http://${req.headers.host}`)
+      const from = url.searchParams.get('from')
+      const to = url.searchParams.get('to')
+
+      if (!from || !to) {
+        sendJson(res, 400, { error: 'from and to are required' })
+        return
+      }
+
+      const result = findRoute(map.data || {}, from, to)
+      if (result.error) {
+        sendJson(res, result.error === 'Unknown node' ? 400 : 404, { error: result.error })
+        return
+      }
+
+      sendJson(res, 200, result)
+      return
+    }
+
+    // CRUD /maps/:id
     const mapId = route.match(/^\/maps\/([^/]+)$/)?.[1]
     if (!mapId) {
       sendJson(res, 404, { error: 'Route not found' })
@@ -261,12 +394,11 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Map not found' })
         return
       }
-      // Владелец или опубликованная карта
-      if ((user && map.userId === user.id) || map.published) {
-        sendJson(res, 200, map)
+      if (!canAccessMap(user, map)) {
+        sendJson(res, 403, { error: 'Forbidden' })
         return
       }
-      sendJson(res, 403, { error: 'Forbidden' })
+      sendJson(res, 200, map)
       return
     }
 
@@ -275,7 +407,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Map not found' })
         return
       }
-      if (map.userId !== user.id) {
+      if (!user || map.userId !== user.id) {
         sendJson(res, 403, { error: 'Forbidden' })
         return
       }
@@ -299,7 +431,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Map not found' })
         return
       }
-      if (map.userId !== user.id) {
+      if (!user || map.userId !== user.id) {
         sendJson(res, 403, { error: 'Forbidden' })
         return
       }
