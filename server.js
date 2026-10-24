@@ -1,11 +1,14 @@
-const http = require('http')
-const fs = require('fs')
-const path = require('path')
-const crypto = require('crypto')
+import http from 'node:http'
+import fs from 'node:fs'
+import path from 'node:path'
+import crypto from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const PORT = Number(process.env.PORT || 3000)
-const ROOT = __dirname
-const DATA_DIR = path.join(ROOT, 'data')
+const DATA_DIR = path.join(__dirname, 'data')
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads')
 const STORE_PATH = path.join(DATA_DIR, 'store.json')
 
@@ -72,10 +75,6 @@ function isAuthenticated(req) {
 
 function getMapById(store, id) {
   return store.maps.find((map) => map.id === id)
-}
-
-function hasOwnMap(user, map) {
-  return map && user && map.userId === user.id
 }
 
 function serveStaticFile(res, filePath) {
