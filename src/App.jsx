@@ -27,7 +27,7 @@ function Login({ onAuth }) {
       <h2 style={{ margin: 0 }}>Карта пространства</h2>
       <div className="card">
         <b>Вход для организаторов</b>
-        <input placeholder="Email" type="email" value={email} onChange={(e) => setE(e.target.value)} />
+        <input placeholder="Name" type="name" value={name} onChange={(e) => setE(e.target.value)} />
         <input placeholder="Пароль (от 6 символов)" type="password" value={password} onChange={(e) => setP(e.target.value)} />
         {err && <small style={{ color: '#e5484d' }}>{err}</small>}
         <div className="row"><button onClick={() => go('login')}>Войти</button><button className="g" onClick={() => go('register')}>Регистрация</button></div>
