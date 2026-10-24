@@ -1,16 +1,89 @@
-# React + Vite
+# Карта Пространства (TTK Hackathon Solution)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Интерактивный веб-сервис для внутренней навигации, создания 2D-планов помещений и просмотра 360°-панорам зданий и мероприятий. Проект разработан в рамках хакатона от компании **ТТК (ТрансТелеком)**.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Основные возможности
 
-## React Compiler
+### 🏢 Для Организаторов и Администраторов (`Editor`)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+* **Редактор 2D-планов:** Разметка помещений, коридоров, зон и стеллажей.
+* **Съемка и загрузка панорам (`PanoCapture`):** Пошаговое создание круговых панорам прямо с камеры телефона или загрузка готовых изображений.
+* **Интерактивные метки (POI):** Размещение точек интереса (стенды, Wi-Fi, входы, стойки регистрации) с описаниями и категориями как на 2D-плане, так и внутри 3D-панорам.
+* **Публикация:** Мгновенное обновление карты без изменения постоянной ссылки.
 
-## Expanding the Oxlint configuration
+### 🧭 Для Посетителей (`Visitor` / `Viewer`)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+* **Интерактивный просмотр:** Исследование комнат и точек на 2D-плане.
+* **3D-Виртуальный тур:** Перемещение между связанными панорамами и просмотр карточек объектов.
+* **Построение маршрутов:** Пошаговая навигация от точки «А» до точки «Б» внутри здания с отображением пути на карте и возможность «пройти» его в панорамах.
+* **Mobile-First UX:** Адаптированный и быстрый интерфейс для работы с мобильных устройств.
+
+---
+
+## 🛠 Технологический стек
+
+* **Frontend:** [React](https://react.dev/) + JavaScript (ES6+)
+* **Сборщик:** [Vite](https://vitejs.dev/)
+* **Стилизация:** CSS3 (Custom Styles / Responsive Design)
+* **Линтинг и качество кода:** [Oxlint](https://oxc-project.github.io/)
+
+---
+
+## 📁 Структура проекта
+
+```text
+ttk_hack-master/
+├── public/              # Статические ресурсы (иконки, favicon)
+├── src/
+│   ├── App.jsx          # Главный компонент приложения
+│   ├── Editor.jsx       # Конструктор карт и редактирование меток
+│   ├── Viewer.jsx       # Просмотрщик 360°-панорам
+│   ├── Visitor.jsx      # Режим посетителя (карта, поиск, детали)
+│   ├── Plan.jsx         # Отрисовка и навигация по 2D-плану
+│   ├── PanoCapture.jsx  # Модуль съемки и захвата панорам
+│   ├── api.js           # Взаимодействие с backend API
+│   └── util.js          # Вспомогательные функции и алгоритмы (в т.ч. навигационные)
+├── editor.html          # Точка входа для редактора
+├── index.html           # Главная точка входа
+└── vite.config.js       # Конфигурация Vite
+```
+
+---
+
+## 📦 Установка и запуск
+
+### Предварительные требования
+
+* **Node.js** версии `18.x` или выше
+* **npm** или **yarn**
+
+### 1. Клонирование репозитория и установка зависимостей
+
+```bash
+git clone <repository-url>
+cd ttk_hack-master
+npm install
+```
+
+### 2. Запуск в режиме разработки
+
+```bash
+npm run dev
+```
+
+После запуска откройте локальный адрес (обычно `http://localhost:5173`) в браузере.
+
+### 3. Сборка для Production
+
+```bash
+npm run build
+```
+
+---
+
+## 📝 Особенности реализации
+
+* **Быстрая загрузка:** Оптимизированный рендеринг панорам и легкий 2D-план гарантируют высокую скорость работы даже при слабом мобильном интернете.
+* **Интуитивный интерфейс:** Интерфейс подсказывает порядок действий при съемке панорам с телефона.
