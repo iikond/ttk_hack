@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактор карт и панорам пространств — ТТК</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Pannellum CSS & JS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        ttk: {
+                            red: '#E21A1A',
+                            darkRed: '#C11414',
+                            gray: '#1E232A',
+                            lightGray: '#2A303C',
+                            accent: '#38BDF8'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4B5563;
+        }
+        .pnnm-compass {
+            bottom: 20px !important;
+            right: 20px !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 h-full flex flex-col font-sans overflow-hidden select-none">
+
+<!-- Header / Navigation Bar -->
+<header class="h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 z-20 shrink-0">
+    <div class="flex items-center space-x-3">
+        <div class="bg-ttk-red text-white font-extrabold px-3 py-1.5 rounded-lg text-lg tracking-wider shadow-lg shadow-ttk-red/20">
+            ТТК
+        </div>
+        <div>
+            <h1 class="font-bold text-base md:text-lg leading-tight text-white">Карта пространства</h1>
+            <p class="text-xs text-gray-400 hidden sm:block">Конструктор 2D-планов & 360° Панорам</p>
+        </div>
+    </div>
+
+    <!-- Mode Tabs Switcher -->
+    <div class="flex bg-gray-950 p-1 rounded-xl border border-gray-800 shadow-inner">
+        <button id="mode-draw-btn" onclick="setMode('draw')" class="flex items-center space-x-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-ttk-red text-white shadow-md">
+            <i class="fa-solid fa-pen-ruler"></i>
+            <span>1. Рисование плана</span>
+        </button>
+        <button id="mode-marker-btn" onclick="setMode('marker')" class="flex items-center space-x-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-gray-400 hover:text-white">
+            <i class="fa-solid fa-location-dot"></i>
+            <span>2. Точки и Панорамы</span>
+        </button>
+    </div>
+
+    <!-- Action Buttons (Export / Import / Clear) -->
+    <div class="flex items-center space-x-2">
+        <button onclick="document.getElementById('import-file').click()" class="bg-gray-800 hover:bg-gray-700 text-gray-200 p-2 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1.5 border border-gray-700" title="Импортировать JSON">
+            <i class="fa-solid fa-file-import"></i>
+            <span class="hidden md:inline">Импорт</span>
+        </button>
+        <input type="file" id="import-file" accept=".json" class="hidden" onchange="importProject(event)">
+
+        <button onclick="exportProject()" class="bg-gray-800 hover:bg-gray-700 text-gray-200 p-2 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1.5 border border-gray-700" title="Экспортировать JSON">
+            <i class="fa-solid fa-file-export"></i>
+            <span class="hidden md:inline">Экспорт</span>
+        </button>
+
+        <button onclick="clearCanvasPrompt()" class="bg-red-950/50 hover:bg-red-900/60 text-red-300 p-2 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition border border-red-800/50" title="Очистить всё">
+            <i class="fa-solid fa-trash-can"></i>
+        </button>
+    </div>
+</header>
+
+<!-- Main Work Area -->
+<div class="flex-1 flex overflow-hidden relative">
+
+    <!-- Left Toolbar (Contextual based on active mode) -->
+    <aside id="toolbar" class="w-16 sm:w-64 bg-gray-900 border-r border-gray-800 p-3 flex flex-col justify-between shrink-0 z-10 overflow-y-auto">
+
+        <!-- DRAW MODE TOOLBAR -->
+        <div id="draw-tools" class="space-y-4">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:block">Инструменты плана</div>
+
+            <div class="space-y-1.5">
+                <button onclick="setDrawTool('wall')" id="tool-wall" class="tool-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition bg-gray-800 text-white border border-gray-700">
+                    <i class="fa-solid fa-slash text-ttk-red text-base w-5 text-center"></i>
+                    <span class="hidden sm:inline">Стена (Отрезки)</span>
+                </button>
+
+                <button onclick="setDrawTool('room')" id="tool-room" class="tool-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition text-gray-400 hover:bg-gray-800 hover:text-white">
+                    <i class="fa-regular fa-square text-ttk-red text-base w-5 text-center"></i>
+                    <span class="hidden sm:inline">Комната (Прямоугольник)</span>
+                </button>
+
+                <button onclick="setDrawTool('door')" id="tool-door" class="tool-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition text-gray-400 hover:bg-gray-800 hover:text-white">
+                    <i class="fa-solid fa-door-open text-amber-400 text-base w-5 text-center"></i>
+                    <span class="hidden sm:inline">Дверь / Проход</span>
+                </button>
+
+                <button onclick="setDrawTool('erase')" id="tool-erase" class="tool-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition text-gray-400 hover:bg-gray-800 hover:text-white">
+                    <i class="fa-solid fa-eraser text-red-500 text-base w-5 text-center"></i>
+                    <span class="hidden sm:inline">Удаление (Ластик)</span>
+                </button>
+            </div>
+
+            <hr class="border-gray-800 my-3">
+
+            <!-- Grid & Snap Settings -->
+            <div class="space-y-3">
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:block">Параметры сетки</div>
+
+                <label class="flex items-center justify-between cursor-pointer group">
+                    <span class="text-xs sm:text-sm text-gray-300 hidden sm:inline">Отображать сетку</span>
+                    <input type="checkbox" id="show-grid-toggle" checked onchange="toggleGrid(this.checked)" class="sr-only peer">
+                    <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-ttk-red relative"></div>
+                </label>
+
+                <label class="flex items-center justify-between cursor-pointer group">
+                    <span class="text-xs sm:text-sm text-gray-300 hidden sm:inline">Привязка к сетке</span>
+                    <input type="checkbox" id="snap-grid-toggle" checked class="sr-only peer">
+                    <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-ttk-red relative"></div>
+                </label>
+
+                <div class="hidden sm:block">
+                    <label class="text-xs text-gray-400 block mb-1">Размер ячейки: <span id="grid-size-val">20</span>px</label>
+                    <input type="range" id="grid-size-slider" min="10" max="50" step="5" value="20" oninput="changeGridSize(this.value)" class="w-full accent-ttk-red bg-gray-800 rounded-lg cursor-pointer h-1.5">
+                </div>
+            </div>
+
+            <hr class="border-gray-800 my-3">
+
+            <!-- Blueprint / Overlay Upload -->
+            <div class="space-y-2">
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:block">Подложка-чертеж</div>
+                <button onclick="document.getElementById('blueprint-upload').click()" class="w-full bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl p-2.5 text-center text-xs text-gray-300 transition flex flex-col items-center justify-center space-y-1">
+                    <i class="fa-solid fa-cloud-arrow-up text-lg text-gray-400"></i>
+                    <span class="hidden sm:inline">Загрузить фоновый чертеж</span>
+                </button>
+                <input type="file" id="blueprint-upload" accept="image/*" class="hidden" onchange="loadBlueprint(event)">
+
+                <button id="remove-blueprint-btn" onclick="removeBlueprint()" class="w-full text-xs text-red-400 hover:text-red-300 hidden sm:hidden text-center py-1">
+                    Удалить подложку
+                </button>
+            </div>
+        </div>
+
+        <!-- MARKER MODE TOOLBAR -->
+        <div id="marker-tools" class="space-y-4 hidden">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:block">Маркеры и Панорамы</div>
+
+            <div class="p-3 bg-gray-800/60 rounded-xl border border-gray-700/50 text-xs text-gray-300 space-y-2 hidden sm:block">
+                <p class="font-semibold text-white flex items-center space-x-1.5">
+                    <i class="fa-solid fa-circle-info text-ttk-red"></i>
+                    <span>Инструкция:</span>
+                </p>
+                <p>Кликните в любую точку 2D-плана, чтобы установить новый маркер или выберите существующий для редактирования.</p>
+            </div>
+
+            <div id="marker-list-container" class="space-y-2">
+                <div class="text-xs font-semibold text-gray-400 hidden sm:block">Список точек (<span id="marker-count">0</span>)</div>
+                <div id="marker-list" class="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                    <div class="text-xs text-gray-500 italic p-2 text-center">Нет добавленных точек</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Undo / Action Bar -->
+        <div class="space-y-2 pt-2 border-t border-gray-800">
+            <button onclick="undo()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition flex items-center justify-center space-x-2 border border-gray-700">
+                <i class="fa-solid fa-rotate-left"></i>
+                <span class="hidden sm:inline">Отменить действие</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Canvas Interactive Container -->
+    <main class="flex-1 relative bg-gray-950 overflow-hidden flex items-center justify-center">
+        <canvas id="editorCanvas" class="cursor-crosshair block shadow-2xl rounded-lg border border-gray-800/80"></canvas>
+
+        <!-- Context Help Floating Badge -->
+        <div class="absolute bottom-4 left-4 bg-gray-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gray-800 text-xs text-gray-400 shadow-xl flex items-center space-x-2">
+            <span id="canvas-status">Режим: Рисование стены</span>
+            <span class="text-gray-600">|</span>
+            <span id="coordinates-display">X: 0, Y: 0</span>
+        </div>
+    </main>
+
+    <!-- Right Sidebar for Marker Property Editing -->
+    <aside id="marker-properties-panel" class="w-80 bg-gray-900 border-l border-gray-800 p-4 flex flex-col justify-between shrink-0 z-10 transform translate-x-full transition-transform duration-300 absolute right-0 top-0 bottom-0 sm:relative sm:translate-x-0 hidden">
+        <div class="space-y-4">
+            <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                <h3 class="font-bold text-sm text-white flex items-center space-x-2">
+                    <i class="fa-solid fa-sliders text-ttk-red"></i>
+                    <span>Параметры точки</span>
+                </h3>
+                <button onclick="deselectMarker()" class="text-gray-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-base"></i>
+                </button>
+            </div>
+
+            <form id="marker-form" onsubmit="event.preventDefault(); saveMarkerDetails();" class="space-y-3">
+                <div>
+                    <label class="text-xs font-semibold text-gray-400 block mb-1">Название точки *</label>
+                    <input type="text" id="prop-title" placeholder="например, Станция Wi-Fi / Стенд №1" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-ttk-red transition">
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-gray-400 block mb-1">Категория</label>
+                    <select id="prop-category" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-ttk-red transition">
+                        <option value="stand">📍 Стенд / Зона</option>
+                        <option value="entrance">🚪 Вход / Выход</option>
+                        <option value="wifi">📶 Точка Wi-Fi</option>
+                        <option value="service">ℹ️ Инфо-стойка</option>
+                        <option value="stage">🎤 Главная сцена</option>
+                        <option value="wc">🚻 Санузел</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-gray-400 block mb-1">Описание точки</label>
+                    <textarea id="prop-desc" rows="2" placeholder="Подробное описание локации..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-ttk-red transition resize-none"></textarea>
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-gray-400 block mb-1">URL 360° Панорамы</label>
+                    <input type="text" id="prop-pano-url" placeholder="https://..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-ttk-red transition">
+                </div>
+
+                <!-- Wizard CTA Button -->
+                <button type="button" onclick="startPanoWizard()" class="w-full bg-gradient-to-r from-ttk-red to-rose-600 hover:from-ttk-darkRed hover:to-rose-700 text-white rounded-xl py-2.5 text-xs font-bold transition flex items-center justify-center space-x-2 shadow-lg shadow-ttk-red/20 border border-red-500/30">
+                    <i class="fa-solid fa-camera-retro text-sm"></i>
+                    <span>Снять панораму с телефона (Гайд)</span>
+                </button>
+
+                <button type="button" onclick="openPanoramaModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-ttk-accent border border-ttk-accent/30 rounded-xl py-2 text-xs font-semibold transition flex items-center justify-center space-x-2 shadow-lg">
+                    <i class="fa-solid fa-vr-cardboard text-sm"></i>
+                    <span>Просмотреть 360° Панораму</span>
+                </button>
+
+                <div class="pt-2 flex items-center space-x-2">
+                    <button type="submit" class="flex-1 bg-ttk-red hover:bg-ttk-darkRed text-white py-2 rounded-xl text-xs font-bold transition shadow-md">
+                        Сохранить
+                    </button>
+                    <button type="button" onclick="deleteSelectedMarker()" class="bg-red-950/60 hover:bg-red-900/80 text-red-300 p-2 rounded-xl text-xs font-medium border border-red-800/50 transition" title="Удалить маркер">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </aside>
+</div>
+
+<!-- PANORAMA CAPTURE WIZARD MODAL (PDF Requirement) -->
+<div id="pano-wizard-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+
+        <!-- Wizard Header -->
+        <div class="px-5 py-4 bg-gray-950 border-b border-gray-800 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-ttk-red/20 text-ttk-red rounded-lg">
+                    <i class="fa-solid fa-camera-rotate text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm sm:text-base text-white">Мастер съёмки панорамы</h3>
+                    <p class="text-xs text-gray-400">Пошаговая инструкция для телефона</p>
+                </div>
+            </div>
+            <button onclick="closePanoWizard()" class="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800 transition">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <!-- Step Indicators -->
+        <div class="grid grid-cols-4 border-b border-gray-800 text-center text-xs py-2 bg-gray-900/50">
+            <div id="wiz-tab-1" class="font-bold text-ttk-red border-b-2 border-ttk-red pb-1">1. Позиция</div>
+            <div id="wiz-tab-2" class="text-gray-500 pb-1">2. Кадры</div>
+            <div id="wiz-tab-3" class="text-gray-500 pb-1">3. Сборка</div>
+            <div id="wiz-tab-4" class="text-gray-500 pb-1">4. Привязка</div>
+        </div>
+
+        <!-- Wizard Step Content Container -->
+        <div class="p-6 space-y-4">
+
+            <!-- STEP 1: Position & Setup -->
+            <div id="wiz-step-1" class="space-y-4">
+                <div class="bg-gray-800/60 p-4 rounded-xl border border-gray-700/60 space-y-3">
+                    <h4 class="font-bold text-white text-sm flex items-center space-x-2">
+                        <i class="fa-solid fa-person-dots-from-line text-ttk-accent"></i>
+                        <span>Шаг 1: Выбор точки съёмки</span>
+                    </h4>
+                    <ul class="text-xs text-gray-300 space-y-2 list-disc list-inside">
+                        <li>Встаньте в центр помещения или прохода.</li>
+                        <li>Держите телефон вертикально на уровне глаз/груди.</li>
+                        <li>Держите локти ближе к телу для максимальной стабильности.</li>
+                        <li><b>Главное правило:</b> Поворачивайте телефон вокруг своей оси, а не ходите вокруг него!</li>
+                    </ul>
+                </div>
+                <div class="text-center p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl text-amber-300 text-xs">
+                    <i class="fa-solid fa-lightbulb mr-1"></i> Совет: Избегайте резкого света и движения людей рядом.
+                </div>
+            </div>
+
+            <!-- STEP 2: Shooting Process -->
+            <div id="wiz-step-2" class="space-y-4 hidden">
+                <div class="bg-gray-800/60 p-4 rounded-xl border border-gray-700/60 space-y-3">
+                    <h4 class="font-bold text-white text-sm flex items-center space-x-2">
+                        <i class="fa-solid fa-arrows-spin text-emerald-400"></i>
+                        <span>Шаг 2: Серия снимков (360°)</span>
+                    </h4>
+                    <p class="text-xs text-gray-300">
+                        Сделайте от 8 до 12 фотографий, поворачиваясь по часовой стрелке.
+                    </p>
+                    <div class="space-y-2 text-xs text-gray-300 bg-gray-900 p-3 rounded-lg border border-gray-800">
+                        <div class="flex items-center justify-between">
+                            <span>Перекрытие кадров:</span>
+                            <span class="font-bold text-emerald-400">30% - 40%</span>
+                        </div>
+                        <div class="w-full bg-gray-800 rounded-full h-2">
+                            <div class="bg-emerald-500 h-2 rounded-full w-3/5"></div>
+                        </div>
+                        <p class="text-[10px] text-gray-400">Каждый новый снимок должен захватывать край предыдущего кадра.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 3: Stitching & Processing -->
+            <div id="wiz-step-3" class="space-y-4 hidden">
+                <div class="bg-gray-800/60 p-4 rounded-xl border border-gray-700/60 space-y-3">
+                    <h4 class="font-bold text-white text-sm flex items-center space-x-2">
+                        <i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i>
+                        <span>Шаг 3: Объединение в панораму</span>
+                    </h4>
+                    <p class="text-xs text-gray-300">
+                        Загрузите готовый равнопромежуточный (Equirectangular) файл панорамы или укажите URL-ссылку.
+                    </p>
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Ссылка на фото 360°</label>
+                        <input type="text" id="wiz-pano-input" placeholder="https://..." class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-ttk-red">
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 4: Binding to 2D Map -->
+            <div id="wiz-step-4" class="space-y-4 hidden">
+                <div class="bg-gray-800/60 p-4 rounded-xl border border-gray-700/60 space-y-3">
+                    <h4 class="font-bold text-white text-sm flex items-center space-x-2">
+                        <i class="fa-solid fa-location-dot text-ttk-red"></i>
+                        <span>Шаг 4: Привязка к точке на плане</span>
+                    </h4>
+                    <p class="text-xs text-gray-300">
+                        Панорама будет автоматически привязана к выбранной точке на вашей 2D-карте. Посетители смогут открывать её прямо с плана.
+                    </p>
+                    <div class="p-3 bg-emerald-950/30 border border-emerald-800/40 rounded-xl text-emerald-300 text-xs flex items-center space-x-2">
+                        <i class="fa-solid fa-circle-check text-base"></i>
+                        <span>Все шаги пройдены! Нажмите «Применить» для сохранения.</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Wizard Controls Footer -->
+        <div class="px-6 py-3 bg-gray-950 border-t border-gray-800 flex items-center justify-between">
+            <button id="wiz-prev-btn" onclick="wizardPrevStep()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition disabled:opacity-50" disabled>
+                Назад
+            </button>
+            <button id="wiz-next-btn" onclick="wizardNextStep()" class="px-5 py-2 bg-ttk-red hover:bg-ttk-darkRed text-white rounded-xl text-xs font-bold transition shadow-md">
+                Далее
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- 360 PANORAMA MODAL (PANNELLUM VIEWER) -->
+<div id="pano-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 hidden">
+    <div class="w-full max-w-5xl bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[85vh]">
+
+        <!-- Modal Header -->
+        <div class="px-4 py-3 bg-gray-950 border-b border-gray-800 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-compass text-ttk-red text-lg"></i>
+                <div>
+                    <h3 id="modal-pano-title" class="font-bold text-sm sm:text-base text-white">Просмотр панорамы</h3>
+                    <p id="modal-pano-desc" class="text-xs text-gray-400">Интерактивный обзор пространства</p>
+                </div>
+            </div>
+            <button onclick="closePanoramaModal()" class="text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-800 transition">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+
+        <!-- Modal Body (Pannellum Container) -->
+        <div class="flex-1 relative bg-black">
+            <div id="panorama-container" class="w-full h-full"></div>
+        </div>
+    </div>
+</div>
+
+<!-- APPLICATION LOGIC SCRIPT -->
+<script>
+    // State Application Store
+    const state = {
+        mode: 'draw',
+        drawTool: 'wall',
+        grid: { visible: true, snap: true, size: 20 },
+        walls: [],
+        doors: [],
+        markers: [],
+        blueprintImage: null,
+        history: [],
+        activeMarkerId: null,
+        wizardStep: 1,
+        drawingState: {
+            isDrawing: false,
+            isErasing: false,
+            startX: 0,
+            startY: 0,
+            currentX: 0,
+            currentY: 0
+        }
+    };
+
+    const canvas = document.getElementById('editorCanvas');
+    const ctx = canvas.getContext('2d');
+    let pannellumViewer = null;
+
+    const DEMO_PANORAMA = 'https://pannellum.org/images/alma.jpg';
+
+    function resizeCanvas() {
+        const container = canvas.parentElement;
+        canvas.width = container.clientWidth - 32;
+        canvas.height = container.clientHeight - 32;
+        render();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function saveHistory() {
+        state.history.push(JSON.stringify({
+            walls: state.walls,
+            doors: state.doors,
+            markers: state.markers
+        }));
+        if (state.history.length > 30) state.history.shift();
+    }
+
+    function undo() {
+        if (state.history.length === 0) return;
+        const previousState = JSON.parse(state.history.pop());
+        state.walls = previousState.walls || [];
+        state.doors = previousState.doors || [];
+        state.markers = previousState.markers || [];
+        render();
+        updateMarkerList();
+    }
+
+    function snap(val) {
+        if (!state.grid.snap) return val;
+        return Math.round(val / state.grid.size) * state.grid.size;
+    }
+
+    function setMode(mode) {
+        state.mode = mode;
+        const drawBtn = document.getElementById('mode-draw-btn');
+        const markerBtn = document.getElementById('mode-marker-btn');
+        const drawTools = document.getElementById('draw-tools');
+        const markerTools = document.getElementById('marker-tools');
+        const propsPanel = document.getElementById('marker-properties-panel');
+
+        if (mode === 'draw') {
+            drawBtn.className = "flex items-center space-x-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-ttk-red text-white shadow-md";
+            markerBtn.className = "flex items-center space-x-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-gray-400 hover:text-white";
+            drawTools.classList.remove('hidden');
+            markerTools.classList.add('hidden');
+            propsPanel.classList.add('hidden');
+            canvas.style.cursor = state.drawTool === 'erase' ? 'cell' : 'crosshair';
+            document.getElementById('canvas-status').innerText = state.drawTool === 'erase' ? 'Режим: Удаление (Ластик)' : 'Режим: Рисование плана';
+        } else {
+            markerBtn.className = "flex items-center space-x-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-ttk-red text-white shadow-md";
+            drawBtn.className = "flex items-center space-x-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-gray-400 hover:text-white";
+            drawTools.classList.add('hidden');
+            markerTools.classList.remove('hidden');
+            propsPanel.classList.remove('hidden');
+            canvas.style.cursor = 'default';
+            document.getElementById('canvas-status').innerText = 'Режим: Размещение маркеров';
+            updateMarkerList();
+        }
+        render();
+    }
+
+    function setDrawTool(tool) {
+        state.drawTool = tool;
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+            btn.className = "tool-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition text-gray-400 hover:bg-gray-800 hover:text-white";
+        });
+        const activeBtn = document.getElementById(`tool-${tool}`);
+        if (activeBtn) {
+            activeBtn.className = "tool-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition bg-gray-800 text-white border border-gray-700";
+        }
+
+        if (tool === 'erase') {
+            canvas.style.cursor = 'cell';
+            document.getElementById('canvas-status').innerText = 'Режим: Удаление (Ластик)';
+        } else {
+            canvas.style.cursor = 'crosshair';
+            document.getElementById('canvas-status').innerText = 'Режим: Рисование плана';
+        }
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const rawX = e.clientX - rect.left;
+        const rawY = e.clientY - rect.top;
+        const x = snap(rawX);
+        const y = snap(rawY);
+
+        if (state.mode === 'draw') {
+            saveHistory();
+            if (state.drawTool === 'wall' || state.drawTool === 'room') {
+                state.drawingState.isDrawing = true;
+                state.drawingState.startX = x;
+                state.drawingState.startY = y;
+                state.drawingState.currentX = x;
+                state.drawingState.currentY = y;
+            } else if (state.drawTool === 'door') {
+                state.doors.push({ x, y });
+                render();
+            } else if (state.drawTool === 'erase') {
+                state.drawingState.isErasing = true;
+                state.drawingState.currentX = rawX;
+                state.drawingState.currentY = rawY;
+                removeElementsAt(rawX, rawY);
+            }
+        } else if (state.mode === 'marker') {
+            const clickedMarker = state.markers.find(m => Math.hypot(m.x - rawX, m.y - rawY) < 16);
+            if (clickedMarker) {
+                selectMarker(clickedMarker.id);
+            } else {
+                saveHistory();
+                const newMarker = {
+                    id: 'marker_' + Date.now(),
+                    x: Math.round(rawX),
+                    y: Math.round(rawY),
+                    title: 'Новая точка ' + (state.markers.length + 1),
+                    category: 'stand',
+                    description: '',
+                    panoramaUrl: DEMO_PANORAMA
+                };
+                state.markers.push(newMarker);
+                selectMarker(newMarker.id);
+                updateMarkerList();
+                render();
+            }
+        }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const rawX = e.clientX - rect.left;
+        const rawY = e.clientY - rect.top;
+        const x = snap(rawX);
+        const y = snap(rawY);
+
+        document.getElementById('coordinates-display').innerText = `X: ${Math.round(rawX)}, Y: ${Math.round(rawY)}`;
+
+        if (state.drawingState.isDrawing) {
+            state.drawingState.currentX = x;
+            state.drawingState.currentY = y;
+            render();
+        } else if (state.drawingState.isErasing) {
+            state.drawingState.currentX = rawX;
+            state.drawingState.currentY = rawY;
+            removeElementsAt(rawX, rawY);
+        } else if (state.drawTool === 'erase') {
+            state.drawingState.currentX = rawX;
+            state.drawingState.currentY = rawY;
+            render();
+        }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+        if (state.drawingState.isDrawing) {
+            state.drawingState.isDrawing = false;
+            const { startX, startY, currentX, currentY } = state.drawingState;
+
+            if (state.drawTool === 'wall') {
+                if (startX !== currentX || startY !== currentY) {
+                    state.walls.push({ x1: startX, y1: startY, x2: currentX, y2: currentY });
+                }
+            } else if (state.drawTool === 'room') {
+                if (startX !== currentX && startY !== currentY) {
+                    state.walls.push({ x1: startX, y1: startY, x2: currentX, y2: startY });
+                    state.walls.push({ x1: currentX, y1: startY, x2: currentX, y2: currentY });
+                    state.walls.push({ x1: currentX, y1: currentY, x2: startX, y2: currentY });
+                    state.walls.push({ x1: startX, y1: currentY, x2: startX, y2: startY });
+                }
+            }
+            render();
+        }
+        if (state.drawingState.isErasing) {
+            state.drawingState.isErasing = false;
+            render();
+        }
+    });
+
+    function removeElementsAt(x, y, radius = 15) {
+        let changed = false;
+
+        const initialDoorsLen = state.doors.length;
+        state.doors = state.doors.filter(d => Math.hypot(d.x - x, d.y - y) >= radius);
+        if (state.doors.length !== initialDoorsLen) changed = true;
+
+        const initialWallsLen = state.walls.length;
+        state.walls = state.walls.filter(w => {
+            const dist = distToSegment({ x, y }, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
+            return dist >= radius;
+        });
+        if (state.walls.length !== initialWallsLen) changed = true;
+
+        if (changed || state.drawTool === 'erase') {
+            render();
+        }
+    }
+
+    function distToSegment(p, v, w) {
+        const l2 = (w.x - v.x)**2 + (w.y - v.y)**2;
+        if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
+        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (state.blueprintImage) {
+            ctx.globalAlpha = 0.4;
+            ctx.drawImage(state.blueprintImage, 0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 1.0;
+        }
+
+        if (state.grid.visible) {
+            ctx.strokeStyle = '#1F2937';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += state.grid.size) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += state.grid.size) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        ctx.strokeStyle = '#F3F4F6';
+        ctx.lineWidth = 6;
+        ctx.lineCap = 'round';
+        state.walls.forEach(w => {
+            ctx.beginPath();
+            ctx.moveTo(w.x1, w.y1);
+            ctx.lineTo(w.x2, w.y2);
+            ctx.stroke();
+        });
+
+        if (state.drawingState.isDrawing) {
+            ctx.strokeStyle = '#E21A1A';
+            ctx.lineWidth = 4;
+            const { startX, startY, currentX, currentY } = state.drawingState;
+
+            if (state.drawTool === 'wall') {
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+            } else if (state.drawTool === 'room') {
+                ctx.strokeRect(startX, startY, currentX - startX, currentY - startY);
+            }
+        }
+
+        if (state.mode === 'draw' && state.drawTool === 'erase') {
+            const { currentX, currentY, isErasing } = state.drawingState;
+            ctx.beginPath();
+            ctx.arc(currentX, currentY, 15, 0, Math.PI * 2);
+            ctx.fillStyle = isErasing ? 'rgba(239, 68, 68, 0.4)' : 'rgba(239, 68, 68, 0.2)';
+            ctx.fill();
+            ctx.strokeStyle = '#EF4444';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        state.doors.forEach(d => {
+            ctx.fillStyle = '#F59E0B';
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#111827';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+
+        state.markers.forEach(m => {
+            const isSelected = m.id === state.activeMarkerId;
+
+            ctx.beginPath();
+            ctx.arc(m.x, m.y, isSelected ? 16 : 12, 0, Math.PI * 2);
+            ctx.fillStyle = isSelected ? 'rgba(226, 26, 26, 0.4)' : 'rgba(56, 189, 248, 0.3)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(m.x, m.y, 8, 0, Math.PI * 2);
+            ctx.fillStyle = isSelected ? '#E21A1A' : '#38BDF8';
+            ctx.fill();
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '11px sans-serif';
+            ctx.fillText(m.title, m.x + 14, m.y + 4);
+        });
+    }
+
+    function toggleGrid(show) {
+        state.grid.visible = show;
+        render();
+    }
+
+    function changeGridSize(size) {
+        state.grid.size = parseInt(size);
+        document.getElementById('grid-size-val').innerText = size;
+        render();
+    }
+
+    function loadBlueprint(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    state.blueprintImage = img;
+                    document.getElementById('remove-blueprint-btn').classList.remove('hidden');
+                    render();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function removeBlueprint() {
+        state.blueprintImage = null;
+        document.getElementById('remove-blueprint-btn').classList.add('hidden');
+        render();
+    }
+
+    function selectMarker(id) {
+        state.activeMarkerId = id;
+        const marker = state.markers.find(m => m.id === id);
+        if (marker) {
+            document.getElementById('prop-title').value = marker.title;
+            document.getElementById('prop-category').value = marker.category;
+            document.getElementById('prop-desc').value = marker.description;
+            document.getElementById('prop-pano-url').value = marker.panoramaUrl;
+        }
+        render();
+        updateMarkerList();
+    }
+
+    function deselectMarker() {
+        state.activeMarkerId = null;
+        render();
+        updateMarkerList();
+    }
+
+    function saveMarkerDetails() {
+        if (!state.activeMarkerId) return;
+        const marker = state.markers.find(m => m.id === state.activeMarkerId);
+        if (marker) {
+            marker.title = document.getElementById('prop-title').value || 'Без названия';
+            marker.category = document.getElementById('prop-category').value;
+            marker.description = document.getElementById('prop-desc').value;
+            marker.panoramaUrl = document.getElementById('prop-pano-url').value;
+            render();
+            updateMarkerList();
+        }
+    }
+
+    function deleteSelectedMarker() {
+        if (!state.activeMarkerId) return;
+        saveHistory();
+        state.markers = state.markers.filter(m => m.id !== state.activeMarkerId);
+        state.activeMarkerId = null;
+        render();
+        updateMarkerList();
+    }
+
+    function updateMarkerList() {
+        const listEl = document.getElementById('marker-list');
+        const countEl = document.getElementById('marker-count');
+        countEl.innerText = state.markers.length;
+
+        if (state.markers.length === 0) {
+            listEl.innerHTML = '<div class="text-xs text-gray-500 italic p-2 text-center">Нет добавленных точек</div>';
+            return;
+        }
+
+        listEl.innerHTML = state.markers.map(m => `
+        <div onclick="selectMarker('${m.id}')" class="p-2 rounded-xl text-xs cursor-pointer border transition flex items-center justify-between ${m.id === state.activeMarkerId ? 'bg-ttk-red/20 border-ttk-red text-white' : 'bg-gray-800/80 border-gray-700/60 text-gray-300 hover:bg-gray-800'}">
+          <div class="truncate pr-2">
+            <div class="font-semibold truncate">${m.title}</div>
+            <div class="text-[10px] text-gray-400 capitalize">${m.category}</div>
+          </div>
+          <i class="fa-solid fa-chevron-right text-[10px] text-gray-500"></i>
+        </div>
+      `).join('');
+    }
+
+    // Panorama Wizard Functions
+    function startPanoWizard() {
+        if (!state.activeMarkerId) {
+            alert('Сначала выберите или создайте точку на карте!');
+            return;
+        }
+        const marker = state.markers.find(m => m.id === state.activeMarkerId);
+        document.getElementById('wiz-pano-input').value = marker?.panoramaUrl || DEMO_PANORAMA;
+        state.wizardStep = 1;
+        updateWizardUI();
+        document.getElementById('pano-wizard-modal').classList.remove('hidden');
+    }
+
+    function closePanoWizard() {
+        document.getElementById('pano-wizard-modal').classList.add('hidden');
+    }
+
+    function wizardNextStep() {
+        if (state.wizardStep < 4) {
+            state.wizardStep++;
+            updateWizardUI();
+        } else {
+            // Apply wizard result
+            const customUrl = document.getElementById('wiz-pano-input').value || DEMO_PANORAMA;
+            document.getElementById('prop-pano-url').value = customUrl;
+            saveMarkerDetails();
+            closePanoWizard();
+        }
+    }
+
+    function wizardPrevStep() {
+        if (state.wizardStep > 1) {
+            state.wizardStep--;
+            updateWizardUI();
+        }
+    }
+
+    function updateWizardUI() {
+        for (let i = 1; i <= 4; i++) {
+            const stepEl = document.getElementById(`wiz-step-${i}`);
+            const tabEl = document.getElementById(`wiz-tab-${i}`);
+
+            if (i === state.wizardStep) {
+                stepEl.classList.remove('hidden');
+                tabEl.className = 'font-bold text-ttk-red border-b-2 border-ttk-red pb-1';
+            } else {
+                stepEl.classList.add('hidden');
+                tabEl.className = 'text-gray-500 pb-1';
+            }
+        }
+
+        const prevBtn = document.getElementById('wiz-prev-btn');
+        const nextBtn = document.getElementById('wiz-next-btn');
+
+        prevBtn.disabled = state.wizardStep === 1;
+        nextBtn.innerText = state.wizardStep === 4 ? 'Применить' : 'Далее';
+    }
+
+    // 360 Panorama Modal Player (Pannellum)
+    function openPanoramaModal() {
+        if (!state.activeMarkerId) return;
+        const marker = state.markers.find(m => m.id === state.activeMarkerId);
+        const url = marker?.panoramaUrl || DEMO_PANORAMA;
+
+        document.getElementById('modal-pano-title').innerText = marker?.title || 'Панорама 360°';
+        document.getElementById('modal-pano-desc').innerText = marker?.description || 'Интерактивный обзор пространства';
+        document.getElementById('pano-modal').classList.remove('hidden');
+
+        if (pannellumViewer) {
+            pannellumViewer.destroy();
+        }
+
+        pannellumViewer = pannellum.viewer('panorama-container', {
+            type: 'equirectangular',
+            panorama: url,
+            autoLoad: true,
+            compass: true,
+            showZoomCtrl: true
+        });
+    }
+
+    function closePanoramaModal() {
+        document.getElementById('pano-modal').classList.add('hidden');
+        if (pannellumViewer) {
+            pannellumViewer.destroy();
+            pannellumViewer = null;
+        }
+    }
+
+    function exportProject() {
+        const data = {
+            version: "1.0",
+            timestamp: new Date().toISOString(),
+            grid: state.grid,
+            walls: state.walls,
+            doors: state.doors,
+            markers: state.markers
+        };
+
+        const jsonStr = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ttk-map-export-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function importProject(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.walls) state.walls = data.walls;
+                if (data.doors) state.doors = data.doors;
+                if (data.markers) state.markers = data.markers;
+                if (data.grid) state.grid = { ...state.grid, ...data.grid };
+
+                render();
+                updateMarkerList();
+                alert('Проект успешно импортирован!');
+            } catch (err) {
+                alert('Ошибка чтения файла JSON: Неверный формат.');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function clearCanvasPrompt() {
+        if (confirm('Вы уверены, что хотите полностью очистить схему и маркеры?')) {
+            saveHistory();
+            state.walls = [];
+            state.doors = [];
+            state.markers = [];
+            state.activeMarkerId = null;
+            render();
+            updateMarkerList();
+        }
+    }
+
+    window.onload = () => {
+        resizeCanvas();
+        setMode('draw');
+    };
+</script>
+</body>
+</html>
