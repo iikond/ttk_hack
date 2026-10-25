@@ -2,7 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { icon } from './util'
 
 // SVG-план с панорамированием/зумом (палец, щипок, колесо). Координаты — в единицах плана.
-export default function Plan({ data, route, selected, showWay, onItem, onBg, onDrag }) {
+const bb = (r) => {
+  if (!r.pts) return r
+  const xs = r.pts.map((p) => p[0]), ys = r.pts.map((p) => p[1])
+  return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }
+}
+const shapeEl = (r, p) => r.pts ? <polygon points={r.pts.map((q) => q.join(',')).join(' ')} {...p} />
+  : r.shape === 'ellipse' ? <ellipse cx={r.x + r.w / 2} cy={r.y + r.h / 2} rx={r.w / 2} ry={r.h / 2} {...p} />
+  : <rect x={r.x} y={r.y} width={r.w} height={r.h} {...p} />
+
+export default function Plan({ data, route, selected, showWay, onItem, onBg, onDrag, grid = 0, draft }) {
   const el = useRef(), vbR = useRef(), szR = useRef({ w: 1, h: 1 }), fit = useRef(true)
   const P = useRef(new Map()), S = useRef({})
   const [vb, setVb] = useState(null), [sw, setSw] = useState(1)
@@ -79,12 +88,21 @@ export default function Plan({ data, route, selected, showWay, onItem, onBg, onD
       {vb && <>
         <rect x="0" y="0" width={W} height={H} fill="#fff" />
         {bg && <image href={bg} x="0" y="0" width={W} height={H} />}
-        {data.rooms.map((r) => (
+        {grid > 0 && <>
+          <defs><pattern id="grid" width={grid} height={grid} patternUnits="userSpaceOnUse">
+            <path d={`M ${grid} 0 H 0 V ${grid}`} fill="none" stroke="rgba(0,0,0,.18)" strokeWidth={k} />
+          </pattern></defs>
+          <rect x="0" y="0" width={W} height={H} fill="url(#grid)" pointerEvents="none" />
+        </>}
+        {data.rooms.map((r) => { const b = bb(r); return (
           <g key={r.id} data-k={'r:' + r.id}>
-            <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="rgba(47,107,255,.08)" stroke="#2f6bff" strokeWidth={2 * k} />
-            <text x={r.x + r.w / 2} y={r.y + 14 * k} textAnchor="middle" fontSize={13 * k} fill="#2f6bff">{r.name}</text>
-          </g>
-        ))}
+            {shapeEl(r, { fill: 'rgba(47,107,255,.08)', stroke: '#2f6bff', strokeWidth: 2 * k })}
+            <text x={b.x + b.w / 2} y={b.y + b.h / 2} textAnchor="middle" dy=".35em" fontSize={13 * k} fill="#2f6bff" pointerEvents="none">{r.name}</text>
+          </g>) })}
+        {draft?.pts.length > 0 && <g pointerEvents="none">
+          {draft.pts.length > 1 && <polyline points={draft.pts.map((q) => q.join(',')).join(' ')} fill="rgba(47,107,255,.1)" stroke="#2f6bff" strokeWidth={2 * k} strokeDasharray={`${6 * k}`} />}
+          {draft.pts.map((q, i) => <circle key={i} cx={q[0]} cy={q[1]} r={(i ? 4 : 8) * k} fill="#2f6bff" />)}
+        </g>}
         {data.edges.map((e) => N[e.a] && N[e.b] && (
           <line key={e.a + e.b} data-k={'e:' + e.a + e.b} x1={N[e.a].x} y1={N[e.a].y} x2={N[e.b].x} y2={N[e.b].y}
             stroke="#e4dcc6" strokeWidth="28" strokeLinecap="round" opacity={bg ? 0.55 : 1} />

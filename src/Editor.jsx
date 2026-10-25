@@ -61,6 +61,7 @@ function PanoEditor({ node, others, onChange, onClose }) {
 export default function Editor({ id }) {
   const [m, setM] = useState(null), [tool, setTool] = useState('select'), [sel, setSel] = useState(null)
   const [link, setLink] = useState(null), [corner, setCorner] = useState(null)
+  const [grid, setGrid] = useState(20), [shape, setShape] = useState('rect'), [poly, setPoly] = useState([])
   const [st, setSt] = useState(''), [dirty, setDirty] = useState(false), [modal, setModal] = useState(null)
   const planFile = useRef(), panoFile = useRef()
 
@@ -81,7 +82,13 @@ export default function Editor({ id }) {
   const d = m.data, node = d.nodes.find((n) => n.id === sel)
   const upd = (fn) => { setM((o) => { const nd = structuredClone(o.data); fn(nd); return { ...o, data: nd } }); setDirty(true) }
   const setN = (patch) => upd((x) => Object.assign(x.nodes.find((n) => n.id === sel), patch))
-  const pick = (t) => { setTool(t); setLink(null); setCorner(null) }
+  const pick = (t) => { setTool(t); setLink(null); setCorner(null); setPoly([]) }
+  const sn = (p) => grid ? { x: Math.round(p.x / grid) * grid, y: Math.round(p.y / grid) * grid } : { x: Math.round(p.x), y: Math.round(p.y) }
+  const finishPoly = () => {
+    if (poly.length < 3) return
+    const name = prompt('Название комнаты') || ''
+    upd((x) => x.rooms.push({ id: uid(), name, shape: 'poly', pts: poly })); setPoly([])
+  }
   const mpp = d.plan.mpp ?? 100 / d.plan.w
 
   const tap = (kind, nid, p) => {
@@ -97,7 +104,7 @@ export default function Editor({ id }) {
       upd((x) => { if (kind === 'r') x.rooms = x.rooms.filter((r) => r.id !== nid); else x.edges = x.edges.filter((e) => e.a + e.b !== nid) })
       return
     }
-    const x0 = Math.round(p.x), y0 = Math.round(p.y)
+    const x0 = sn(p).x, y0 = sn(p).y
     if (tool === 'point') {
       const nn = uid()
       upd((x) => {
@@ -111,10 +118,14 @@ export default function Editor({ id }) {
       upd((x) => { x.nodes.push({ id: nn, t: 'w', x: x0, y: y0 }); if (cur) addEdge(x, cur, nn) })
       setSel(nn)
     } else if (tool === 'room') {
-      if (!corner) setCorner(p)
-      else {
+      const q = sn(p)
+      if (shape === 'poly') {
+        if (poly.length > 2 && Math.hypot(q.x - poly[0][0], q.y - poly[0][1]) < Math.max(grid, 20)) finishPoly()
+        else setPoly([...poly, [q.x, q.y]])
+      } else if (!corner) setCorner(q)
+      else if (Math.abs(corner.x - q.x) > 4 && Math.abs(corner.y - q.y) > 4) {
         const name = prompt('Название комнаты') || ''
-        upd((x) => x.rooms.push({ id: uid(), name, x: Math.round(Math.min(corner.x, p.x)), y: Math.round(Math.min(corner.y, p.y)), w: Math.round(Math.abs(corner.x - p.x)), h: Math.round(Math.abs(corner.y - p.y)) }))
+        upd((x) => x.rooms.push({ id: uid(), name, shape, x: Math.min(corner.x, q.x), y: Math.min(corner.y, q.y), w: Math.abs(corner.x - q.x), h: Math.abs(corner.y - q.y) }))
         setCorner(null)
       }
     } else if (tool === 'select') setSel(null)
@@ -156,12 +167,16 @@ export default function Editor({ id }) {
         <small>Ширина, м</small>
         <input type="number" style={{ width: 80, minWidth: 80 }} value={Math.round(d.plan.w * mpp)}
           onChange={(e) => upd((x) => { x.plan.mpp = (+e.target.value || 1) / x.plan.w })} />
+        <select value={grid} style={{ width: 110, minWidth: 110 }} onChange={(e) => setGrid(+e.target.value)}>
+          <option value={0}>Без сетки</option><option value={10}>Сетка 10</option><option value={20}>Сетка 20</option><option value={50}>Сетка 50</option>
+        </select>
         <button className="g" onClick={publish}>{m.published ? '🟢 Опубликована' : '⚪ Опубликовать'}</button>
         <button className="g" onClick={() => (navigator.clipboard ? navigator.clipboard.writeText(url) : prompt('Ссылка', url))}>🔗 Ссылка</button>
         <button className="g" onClick={() => window.open(url, '_blank')}>👁</button>
       </div>
-      <Plan data={d} selected={sel} showWay onItem={tap} onBg={(p) => tap(null, null, p)}
-        onDrag={tool === 'select' ? (nid, p) => upd((x) => { const n = x.nodes.find((q) => q.id === nid); n.x = Math.round(p.x); n.y = Math.round(p.y) }) : undefined} />
+      <Plan data={d} selected={sel} showWay onItem={tap} onBg={(p) => tap(null, null, p)} grid={grid}
+        draft={tool === 'room' ? { pts: shape === 'poly' ? poly : corner ? [[corner.x, corner.y]] : [] } : null}
+        onDrag={tool === 'select' ? (nid, p) => upd((x) => { const n = x.nodes.find((q) => q.id === nid), q = sn(p); n.x = q.x; n.y = q.y }) : undefined} />
       <div className="bar">
         {TOOLS.map(([t, i, l]) => <button key={t} className={tool === t ? '' : 'g'} onClick={() => pick(t)}>{i} {l}</button>)}
       </div>
@@ -186,7 +201,14 @@ export default function Editor({ id }) {
             {node.pano && <button className="g" onClick={() => setN({ pano: undefined })}>Убрать панораму</button>}
           </div>
         </div>
-      ) : <div className="sheet"><small>{corner ? 'Теперь второй угол комнаты' : HINT[tool]}</small></div>}
+      ) : <div className="sheet">
+          {tool === 'room' && <div className="row">
+            {[['rect', '▭ Прямоугольник'], ['ellipse', '◯ Овал'], ['poly', '⬠ Многоугольник']].map(([k, l]) => (
+              <button key={k} className={shape === k ? '' : 'g'} onClick={() => { setShape(k); setCorner(null); setPoly([]) }}>{l}</button>))}
+            {shape === 'poly' && <><button disabled={poly.length < 3} onClick={finishPoly}>Готово</button><button className="g" onClick={() => setPoly(poly.slice(0, -1))}>↩</button></>}
+          </div>}
+          <small>{tool === 'room' ? (shape === 'poly' ? 'Тапайте вершины; «Готово» или тап по первой вершине замкнёт контур' : corner ? 'Теперь противоположный угол' : 'Тап по двум противоположным углам') : HINT[tool]}</small>
+        </div>}
 
       {modal?.k === 'shoot' && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 30 }}>
